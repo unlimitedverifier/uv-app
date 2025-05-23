@@ -20,7 +20,7 @@ export default function Header({ user }: HeaderProps) {
   return (
     <header className="w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between py-4 px-4 md:px-6 max-w-7xl mx-auto">
-        {/* Left side: Logo and Pricing */}
+        {/* Left side: Logo */}
         <div className="flex items-center gap-12">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
@@ -28,11 +28,6 @@ export default function Header({ user }: HeaderProps) {
               <span className="w-3 h-3 bg-white dark:bg-background rounded-sm"></span>
             </span>
             <span className="font-bold text-xl text-foreground">SampleApp</span>
-          </Link>
-          
-          {/* Pricing Link */}
-          <Link href="/pricing" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center pt-0.5">
-            Pricing
           </Link>
         </div>
         

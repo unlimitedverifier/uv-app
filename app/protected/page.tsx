@@ -3,7 +3,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle } from "lucide-react";
 
 type Props = {
-  searchParams: { message?: string } | Promise<{ message?: string }>;
+  searchParams: Promise<{ message?: string }>;
 };
 
 export default async function ProtectedPage({ searchParams }: Props) {
@@ -12,8 +12,8 @@ export default async function ProtectedPage({ searchParams }: Props) {
     data: { user },
   } = await client.auth.getUser();
 
-  // Resolve searchParams if it's a Promise
-  const resolvedParams = searchParams instanceof Promise ? await searchParams : searchParams;
+  // Await searchParams since it's always a Promise
+  const resolvedParams = await searchParams;
 
   if (!user) {
     return (
