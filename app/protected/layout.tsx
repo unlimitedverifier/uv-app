@@ -39,7 +39,7 @@ export default function DashboardLayout({
           </ErrorBoundary>
           
           {/* Main content with error boundary and suspense */}
-          <main className="flex-1 overflow-y-auto p-6 container mx-auto max-w-6xl">
+          <main className="flex-1 overflow-y-auto">
             <ErrorBoundary>
               <Suspense fallback={<LoadingSpinner />}>
                 {children}

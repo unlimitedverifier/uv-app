@@ -32,19 +32,13 @@ export function Sidebar() {
   const [error, setError] = useState<string | null>(null);
   const { theme, setTheme } = useTheme();
   
-  // Simulate checking permissions or loading data
-  // In a real app, this might fetch navigation items based on user permissions
   useEffect(() => {
     const loadNavItems = async () => {
       setIsLoading(true);
       setError(null);
       
       try {
-        // Simulate API call or data loading
         await new Promise(resolve => setTimeout(resolve, 300));
-        // If there was an error, you would throw it here
-        
-        // Success - just finish loading
       } catch (err) {
         console.error("Error loading sidebar data:", err);
         setError(err instanceof Error ? err.message : "Failed to load navigation");
@@ -122,7 +116,7 @@ export function Sidebar() {
         )}
       </nav>
       
-      {/* Theme Toggle - Added to the bottom */}
+      {/* Theme Toggle */}
       <div className="mt-auto p-4">
          <Button 
           variant="ghost"
