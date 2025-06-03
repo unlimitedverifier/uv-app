@@ -9,7 +9,8 @@ import {
   Zap,
   Cat,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  FileSpreadsheet
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Moon, Sun } from "lucide-react";
@@ -20,6 +21,7 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { name: "Dashboard", href: "/protected", icon: LayoutDashboard },
+  { name: "CSV Upload", href: "/protected/csv-upload", icon: FileSpreadsheet },
   { name: "Cat Photo Generator", href: "/protected/paid-content", icon: Cat },
   { name: "Subscriptions", href: "/protected/subscription", icon: CreditCard },
   { name: "Pricing", href: "/protected/pricing", icon: Zap },
