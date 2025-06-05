@@ -2,6 +2,7 @@ import { createSupabaseClient } from "@/utils/supabase/server";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle, ExternalLink, User, Shield, Activity, TrendingUp, Database, Globe } from "lucide-react";
 import { FileUploadCard } from "@/components/file-upload-card";
+import { UserValidationDashboard } from "@/components/user-validation-dashboard";
 
 type Props = {
   searchParams: Promise<{ message?: string }>;
@@ -294,6 +295,32 @@ export default async function ProtectedPage({ searchParams }: Props) {
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Email Validation Dashboard */}
+            <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-black">
+              
+              {/* Header Section */}
+              <div className="flex w-full flex-col p-6">
+                <div className="flex flex-col gap-2">
+                  <h2 className="text-xl font-medium text-slate-900 dark:text-slate-100">
+                    Email Validation
+                  </h2>
+                  <p className="text-sm font-normal text-slate-900/60 dark:text-slate-100/60">
+                    Manage your email validation jobs and view results
+                  </p>
+                </div>
+              </div>
+              
+              {/* Divider */}
+              <div className="flex w-full px-6">
+                <div className="w-full border-b border-slate-200 dark:border-slate-800" />
+              </div>
+              
+              {/* Dashboard Content */}
+              <div className="p-6">
+                <UserValidationDashboard userId={user.id} />
               </div>
             </div>
           </div>

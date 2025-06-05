@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Upload, FileSpreadsheet, X, AlertCircle, Check, Info } from "lucide-react";
+import { Upload, FileSpreadsheet, X, AlertCircle, Check, Info, Play, Download, RefreshCw } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 
 interface ColumnData {
   name: string;
@@ -26,7 +27,30 @@ interface ProcessingAlertInfo {
   isEmailColumn: boolean;
 }
 
-export function CsvXlsxUpload() {
+interface ValidationJob {
+  listId: string;
+  status: 'in_progress' | 'completed' | 'failed';
+  totalEmails: number;
+  processedEmails: number;
+  overallProgress: number;
+  results: {
+    validCount: number;
+    catchAllCount: number;
+    unknownCount: number;
+    invalidCount: number;
+    percentValid: number;
+    percentCatchAll: number;
+    percentUnknown: number;
+    percentInvalid: number;
+  };
+  dateValidated?: string;
+}
+
+interface CsvXlsxUploadProps {
+  userId: string; // Accept userId as prop
+}
+
+export function CsvXlsxUpload({ userId }: CsvXlsxUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<FileData | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
@@ -35,6 +59,12 @@ export function CsvXlsxUpload() {
   
   const [processedDisplayData, setProcessedDisplayData] = useState<(string | number | null)[]>([]);
   const [processingAlertInfo, setProcessingAlertInfo] = useState<ProcessingAlertInfo | null>(null);
+
+  // Validation states
+  const [validationJob, setValidationJob] = useState<ValidationJob | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
+  const [validationStarted, setValidationStarted] = useState(false); // Prevent duplicates
 
   // Function to detect if a value looks like an email
   const isEmailLike = useCallback((value: unknown): boolean => {
@@ -174,6 +204,7 @@ export function CsvXlsxUpload() {
       setSelectedColumn(null); 
       setProcessedDisplayData([]);
       setProcessingAlertInfo(null);
+      setValidationJob(null);
 
       const bestEmailColumn = findBestEmailColumn(columns);
       if (bestEmailColumn) {
@@ -191,6 +222,200 @@ export function CsvXlsxUpload() {
       setIsProcessing(false);
     }
   }, [findBestEmailColumn]);
+
+  // Function to start email validation
+  const startValidation = useCallback(async () => {
+    if (!uploadedFile || !selectedColumn || !processingAlertInfo?.isEmailColumn) {
+      setError('Please select an email column before starting validation.');
+      return;
+    }
+
+    // Prevent duplicate calls - enhanced protection
+    if (isValidating || validationJob || validationStarted) {
+      console.log('⚠️ Validation already in progress or started, ignoring duplicate call');
+      return;
+    }
+
+    setIsValidating(true);
+    setValidationStarted(true);
+    setError(null);
+
+    try {
+      // Prepare the file payload by converting columns back to rows format
+      const emailColumnData = uploadedFile.columns.find(col => col.name === selectedColumn);
+      if (!emailColumnData || !emailColumnData.data) {
+        throw new Error('Selected email column not found or has no data');
+      }
+
+      // Create rows format expected by the backend
+      const filePayload = emailColumnData.data.map((email, index) => {
+        const row: Record<string, unknown> = {};
+        
+        // Add all columns for this row
+        uploadedFile.columns.forEach(column => {
+          row[column.name] = column.data[index];
+        });
+
+        return row;
+      }).filter(row => row[selectedColumn] && String(row[selectedColumn]).trim() !== '');
+
+      // Validate that we have data to send
+      if (!Array.isArray(filePayload) || filePayload.length === 0) {
+        throw new Error('No valid email data found to validate. Please check your email column.');
+      }
+
+      // Generate listId client-side to use consistently
+      const listId = `list-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Use the passed userId instead of hardcoded demo-user
+      console.log(`🚀 Starting validation with userId: ${userId}, listId: ${listId}, totalEmails: ${filePayload.length}`);
+
+      const response = await fetch('/api/workflows/create-list-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId,
+          originalFileName: uploadedFile.fileName,
+          filePayload,
+          selectedColumn,
+          listId
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to start validation`);
+      }
+
+      const result = await response.json();
+      console.log(`✅ Workflow created successfully:`, result);
+      
+      // Use the same listId for progress tracking
+      setValidationJob({
+        listId, // Use our generated listId
+        status: 'in_progress',
+        totalEmails: filePayload.length,
+        processedEmails: 0,
+        overallProgress: 0,
+        results: {
+          validCount: 0,
+          catchAllCount: 0,
+          unknownCount: 0,
+          invalidCount: 0,
+          percentValid: 0,
+          percentCatchAll: 0,
+          percentUnknown: 0,
+          percentInvalid: 0
+        }
+      });
+
+      // Start polling for progress with the generated listId
+      setIsPolling(true);
+      // Wait a moment for the workflow to initialize data in Redis
+      setTimeout(() => pollProgress(userId, listId), 30000); // Wait 30 seconds before first poll
+
+    } catch (err) {
+      console.error('Error starting validation:', err);
+      setError(err instanceof Error ? err.message : 'Failed to start email validation');
+      setValidationJob(null); // Clear any partial validation job
+      setValidationStarted(false); // Reset flag on error
+    } finally {
+      setIsValidating(false);
+    }
+  }, [uploadedFile, selectedColumn, processingAlertInfo, isValidating, validationJob, validationStarted, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Function to poll validation progress
+  const pollProgress = useCallback(async (userId: string, listId: string) => {
+    // Safety check: ensure we have valid parameters
+    if (!userId || !listId || listId === 'undefined') {
+      console.error('Invalid polling parameters:', { userId, listId });
+      setIsPolling(false);
+      setError('Invalid polling parameters - cannot check progress');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/list-progress/${userId}/${listId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to fetch progress`);
+      }
+
+      const progress = await response.json();
+      
+      setValidationJob(prevJob => ({
+        ...prevJob!,
+        status: progress.status,
+        totalEmails: progress.totalEmails,
+        processedEmails: progress.processedEmails,
+        overallProgress: progress.overallProgress,
+        results: progress.results,
+        dateValidated: progress.dateValidated
+      }));
+
+      // Continue polling if still in progress (every 1 minute)
+      if (progress.status === 'in_progress') {
+        setTimeout(() => pollProgress(userId, listId), 60000); // Poll every 1 minute
+      } else {
+        setIsPolling(false);
+      }
+
+    } catch (err) {
+      console.error('Error polling progress:', err);
+      setIsPolling(false);
+      // Only set error for critical failures, not temporary network issues
+      if (err instanceof Error && err.message.includes('404')) {
+        setError('Validation job not found - it may have expired or failed to start');
+      }
+    }
+  }, []);
+
+  // Function to download validated results
+  const downloadResults = useCallback(async (format: 'json' | 'csv' = 'csv') => {
+    if (!validationJob || validationJob.status !== 'completed') return;
+
+    try {
+      // Use the passed userId instead of hardcoded demo-user
+      const url = `/api/download-validated-data/${userId}/${validationJob.listId}?format=${format}`;
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to download results`);
+      }
+
+      if (format === 'csv') {
+        // Download CSV file
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${uploadedFile?.fileName.replace(/\.[^/.]+$/, "")}_validated.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+      } else {
+        // Download JSON file
+        const data = await response.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${uploadedFile?.fileName.replace(/\.[^/.]+$/, "")}_validated.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+      }
+
+    } catch (err) {
+      console.error('Error downloading results:', err);
+      setError(err instanceof Error ? err.message : 'Failed to download results');
+    }
+  }, [validationJob, uploadedFile, userId]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -320,6 +545,9 @@ export function CsvXlsxUpload() {
     setError(null);
     setProcessedDisplayData([]);
     setProcessingAlertInfo(null);
+    setValidationJob(null);
+    setIsPolling(false);
+    setValidationStarted(false); // Reset validation flag
   };
 
   const selectColumn = (columnName: string) => {
@@ -333,9 +561,9 @@ export function CsvXlsxUpload() {
         <div className="flex items-center gap-3">
           <FileSpreadsheet className="h-6 w-6 text-primary" />
           <div>
-            <h2 className="text-xl font-semibold">CSV & XLSX File Upload</h2>
+            <h2 className="text-xl font-semibold">CSV & XLSX Email Validation</h2>
             <p className="text-sm text-muted-foreground">
-              Upload a single CSV or XLSX file to process its columns.
+              Upload a CSV or XLSX file and validate email addresses in bulk.
             </p>
           </div>
         </div>
@@ -409,9 +637,9 @@ export function CsvXlsxUpload() {
             {/* Column Table Preview */}
             <div className="space-y-4">
               <div className="text-center">
-                <h3 className="text-lg font-medium mb-2">Select Column to Process</h3>
+                <h3 className="text-lg font-medium mb-2">Select Email Column to Validate</h3>
                 <p className="text-sm text-muted-foreground">
-                  Click on any column header or data to select it for processing
+                  Click on any column header or data to select it for email validation
                 </p>
               </div>
 
@@ -492,8 +720,101 @@ export function CsvXlsxUpload() {
               </Alert>
             )}
 
+            {/* Start Validation Button */}
+            {selectedColumn && processingAlertInfo?.isEmailColumn && !validationJob && (
+              <div className="flex justify-center">
+                <Button 
+                  onClick={startValidation} 
+                  disabled={isValidating}
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  {isValidating ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Starting Validation...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      Start Email Validation ({processingAlertInfo.finalCount} emails)
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Validation Progress */}
+            {validationJob && (
+              <Card className="p-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium">Email Validation Progress</h3>
+                    <div className="flex items-center gap-2">
+                      {isPolling && <RefreshCw className="h-4 w-4 animate-spin" />}
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        validationJob.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        validationJob.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {validationJob.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Progress: {validationJob.processedEmails} / {validationJob.totalEmails}</span>
+                      <span>{validationJob.overallProgress}%</span>
+                    </div>
+                    <Progress value={validationJob.overallProgress} className="w-full" />
+                  </div>
+
+                  {validationJob.processedEmails > 0 && (
+                    <div className="grid grid-cols-4 gap-3 pt-4">
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-green-600">{validationJob.results.validCount}</div>
+                        <div className="text-sm text-muted-foreground">Good ({validationJob.results.percentValid.toFixed(1)}%)</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-blue-600">{validationJob.results.catchAllCount}</div>
+                        <div className="text-sm text-muted-foreground">Catch all ({validationJob.results.percentCatchAll.toFixed(1)}%)</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-orange-600">{validationJob.results.unknownCount}</div>
+                        <div className="text-sm text-muted-foreground">Risky ({validationJob.results.percentUnknown.toFixed(1)}%)</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xl font-bold text-red-600">{validationJob.results.invalidCount}</div>
+                        <div className="text-sm text-muted-foreground">Bad ({validationJob.results.percentInvalid.toFixed(1)}%)</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {validationJob.status === 'completed' && (
+                    <div className="flex gap-3 pt-4">
+                      <Button onClick={() => downloadResults('csv')} className="flex-1">
+                        <Download className="h-4 w-4 mr-2" />
+                        Download CSV
+                      </Button>
+                      <Button onClick={() => downloadResults('json')} variant="outline" className="flex-1">
+                        <Download className="h-4 w-4 mr-2" />
+                        Download JSON
+                      </Button>
+                    </div>
+                  )}
+
+                  {validationJob.dateValidated && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Completed: {new Date(validationJob.dateValidated).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {/* Selected Column Full Data Display */}
-            {selectedColumn && processedDisplayData.length > 0 && (
+            {selectedColumn && processedDisplayData.length > 0 && !validationJob && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-medium">Displaying Data for &quot;{selectedColumn}&quot;</h3>
@@ -517,7 +838,7 @@ export function CsvXlsxUpload() {
                 </div>
               </div>
             )}
-            {selectedColumn && processedDisplayData.length === 0 && (
+            {selectedColumn && processedDisplayData.length === 0 && !validationJob && (
                 <div className="text-center py-4 text-muted-foreground">
                     No data to display for &quot;{selectedColumn}&quot;.
                     {processingAlertInfo?.isEmailColumn && " This might be due to all entries being empty, invalid, or duplicates."}
