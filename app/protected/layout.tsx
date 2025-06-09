@@ -1,8 +1,7 @@
 'use client';
 
 import { ReactNode, Suspense } from "react";
-import { Sidebar } from "@/components/dashboard/sidebar";
-import { TopBar } from "@/components/dashboard/top-bar";
+import { Navigation } from "@/components/dashboard/navigation";
 import ErrorBoundary from "@/components/error-boundary";
 import { Loader2 } from "lucide-react";
 
@@ -25,28 +24,20 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="min-h-screen bg-background">
-      <div className="flex h-screen overflow-hidden">
-        {/* Sidebar with error boundary */}
+      <div className="flex flex-col h-screen overflow-hidden">
+        {/* Navigation bar with error boundary */}
         <ErrorBoundary>
-          <Sidebar />
+          <Navigation />
         </ErrorBoundary>
         
-        {/* Main content area */}
-        <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Top bar with profile and social buttons */}
+        {/* Main content with error boundary and suspense */}
+        <main className="flex-1 overflow-y-auto">
           <ErrorBoundary>
-            <TopBar />
+            <Suspense fallback={<LoadingSpinner />}>
+              {children}
+            </Suspense>
           </ErrorBoundary>
-          
-          {/* Main content with error boundary and suspense */}
-          <main className="flex-1 overflow-y-auto">
-            <ErrorBoundary>
-              <Suspense fallback={<LoadingSpinner />}>
-                {children}
-              </Suspense>
-            </ErrorBoundary>
-          </main>
-        </div>
+        </main>
       </div>
     </div>
   );

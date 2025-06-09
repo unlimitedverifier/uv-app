@@ -40,7 +40,7 @@ export default async function ProtectedPage({ searchParams }: Props) {
           <div className="flex w-full flex-col space-y-8">
             
             {/* File Upload Card - Client Component */}
-            <FileUploadCard />
+            <FileUploadCard userId={user.id} />
 
             {/* Welcome Back Card */}
             <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-black">

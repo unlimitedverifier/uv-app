@@ -458,7 +458,7 @@ export function UserValidationDashboard({ userId }: UserValidationDashboardProps
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Email Validation History</h2>
+        <h2 className="text-xl">History</h2>
         <Button onClick={fetchUserLists} variant="outline" size="sm">
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
