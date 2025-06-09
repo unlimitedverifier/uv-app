@@ -24,7 +24,7 @@ export async function GET(
 
     // Try to get authenticated user
     const supabaseClient = await createSupabaseClient();
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    const { data: { user } } = await supabaseClient.auth.getUser();
 
     // If we have an authenticated user, verify it matches the requested userId
     if (user && user.id !== userId) {
