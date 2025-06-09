@@ -1,0 +1,6 @@
+# Add these environment variables to your .env.local file:
+
+# Email Verification API System
+API_SYSTEM_NEON_CONNECTION_STRING="postgresql://uv-api_owner:npg_7RP3jveWAUuf@ep-mute-violet-a5j5rrd6-pooler.us-east-2.aws.neon.tech/uv-api?sslmode=require"
+NEXTJS_APP_URL="http://localhost:3000"
+REDIS_API_USAGE_URL="redis://default:PvpyKDPNNDYXOULHOgBZZpNIWzWANuey@mainline.proxy.rlwy.net:39947" 

@@ -49,6 +49,7 @@ export function Navigation() {
   const isCatGeneratorPath = pathname === "/protected/paid-content";
   const isSubscriptionsPath = pathname === "/protected/subscription";
   const isPricingPath = pathname === "/protected/pricing";
+  const isApiKeysPath = pathname === "/protected/api-keys";
 
   // Fetch user email and subscription info
   useEffect(() => {
@@ -363,6 +364,22 @@ export function Navigation() {
               )}
             >
               Pricing
+            </Link>
+          </div>
+          
+          <div
+            className={cn(
+              "flex h-12 items-center border-b-2 flex-shrink-0",
+              isApiKeysPath ? "border-primary" : "border-transparent",
+            )}
+          >
+            <Link
+              href="/protected/api-keys"
+              className={cn(
+                `${buttonVariants({ variant: "ghost", size: "sm" })} text-primary/80 whitespace-nowrap`,
+              )}
+            >
+              API Keys
             </Link>
           </div>
         </div>
